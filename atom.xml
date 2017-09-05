@@ -5,7 +5,7 @@
   <link href="/atom.xml" rel="self"/>
   
   <link href="http://www.moesoft.com/"/>
-  <updated>2017-09-05T06:39:04.000Z</updated>
+  <updated>2017-09-05T07:08:09.000Z</updated>
   <id>http://www.moesoft.com/</id>
   
   <author>
@@ -14,6 +14,43 @@
   </author>
   
   <generator uri="http://hexo.io/">Hexo</generator>
+  
+  <entry>
+    <title>破解TexturePacker加密资源，寻找解密Key之旅</title>
+    <link href="http://www.moesoft.com/2017/09/05/%E7%A0%B4%E8%A7%A3TexturePacker%E5%8A%A0%E5%AF%86%E8%B5%84%E6%BA%90%EF%BC%8C%E5%AF%BB%E6%89%BE%E8%A7%A3%E5%AF%86Key%E4%B9%8B%E6%97%85/"/>
+    <id>http://www.moesoft.com/2017/09/05/破解TexturePacker加密资源，寻找解密Key之旅/</id>
+    <published>2017-09-05T07:05:27.000Z</published>
+    <updated>2017-09-05T07:08:09.000Z</updated>
+    
+    <content type="html"><![CDATA[<p>破解TexturePacker加密资源的方式有好多种。。最多的是hook <code>uncompress</code>然后获取到内容，加入ccz的文件头写入文件。<br>例如：<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div></pre></td><td class="code"><pre><div class="line">http://blog.csdn.net/ynnmnm/article/details/38392795</div><div class="line">http://bbs.pediy.com/showthread.php?t=187332</div></pre></td></tr></table></figure></p>
+<p>今天我用最直接的方法搞定，直接找到用户设置的秘钥。<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">void ZipUtils::ccSetPvrEncryptionKeyPart(int index, unsigned int value)// 设置密钥的接口</div></pre></td></tr></table></figure></p>
+<p>上appstore上随便找个cocos2d的游戏，拖入Hopper，搜索<code>ccSetPvrEncryptionKeyPart</code>，没有找到。然后搜索ZipUtils，如下图：</p>
+<p><img src="http://upload-images.jianshu.io/upload_images/416783-ed56d50b50646b28.png" alt="04E5BC6A-B738-473A-B184-82620C3C66C8.png"></p>
+<p><code>ccDecodeEncodedPvr</code>用来解密pvr.ccz文件，没有找到<code>ccSetPvrEncryptionKeyPart</code>，那么我们在<code>ccDecodeEncodedPvr</code>上下代码块里面试试运气</p>
+<p><img src="http://upload-images.jianshu.io/upload_images/416783-8ca904a53c640e6d.png" alt="E023B78F-3D67-4D35-8613-E610F6F36D1A.png"></p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div></pre></td><td class="code"><pre><div class="line">int sub_444200(int arg0, int arg1) &#123;</div><div class="line">    r1 = arg1;</div><div class="line">    r0 = arg0;</div><div class="line">    r3 = *(0x7d79d0 + r0 * 0x4);</div><div class="line">    asm&#123; it         eq &#125;;</div><div class="line">    if (r3 == r1) &#123;</div><div class="line">            return r0;</div><div class="line">    &#125;</div><div class="line">    *(0x7d79d0 + r0 * 0x4) = r1;</div><div class="line">    *(int8_t *)0x7d89e0 = 0x0;</div><div class="line">    return 0x0;</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>这个有点像。。猜测arg0为index  arg1为value<br>写tweak验证：</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div></pre></td><td class="code"><pre><div class="line">int(*orgccSetPvrEncryptionKey)(int index,unsigned int key);</div><div class="line">int myccSetPvrEncryptionKey(int index,unsigned int key);</div><div class="line">int myccSetPvrEncryptionKey(int index,unsigned int key2key&#123;</div><div class="line">  NSLog(@&quot;\n\n=====  keys: %d-%u    ======\n\n&quot;,index,key);</div><div class="line">  orgccSetPvrEncryptionKey(key1,key2);</div><div class="line">&#125;</div><div class="line">%ctor&#123;</div><div class="line">  NSLog(@&quot;====== HOOKED ======&quot;);</div><div class="line">  intptr_t module_vmaddr = _dyld_get_image_vmaddr_slide(0);</div><div class="line">  intptr_t ccSetPvrEncryptionKey = module_vmaddr + 0x444200 + 1;</div><div class="line">  MSHookFunction((void *)ccSetPvrEncryptionKey, (void*)myccSetPvrEncryptionKey, (void**)&amp;orgccSetPvrEncryptionKey);</div><div class="line">&#125;</div></pre></td></tr></table></figure>
+<p>测试log</p>
+<figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div><div class="line">2</div><div class="line">3</div><div class="line">4</div><div class="line">5</div><div class="line">6</div><div class="line">7</div><div class="line">8</div><div class="line">9</div><div class="line">10</div><div class="line">11</div><div class="line">12</div></pre></td><td class="code"><pre><div class="line">Jun  1 11:57:43 crean XXX[73393]:</div><div class="line"></div><div class="line">	=====  keys: 0-405172683    ======</div><div class="line">Jun  1 11:57:43 crean XXX[73393]:</div><div class="line"></div><div class="line">	=====  keys: 1-1270815801    ======</div><div class="line">Jun  1 11:57:43 crean XXX[73393]:</div><div class="line"></div><div class="line">	=====  keys: 2-3663874658    ======</div><div class="line">Jun  1 11:57:43 crean XXX[73393]:</div><div class="line"></div><div class="line">	=====  keys: 3-2333226975    ======</div></pre></td></tr></table></figure>
+<p>将这4个Key转为16进制为<br><figure class="highlight plain"><table><tr><td class="gutter"><pre><div class="line">1</div></pre></td><td class="code"><pre><div class="line">182671CB4BBF1C39DA624A628B1237DF</div></pre></td></tr></table></figure></p>
+<p>用TexturePacker打开加密的pvr.ccz的文件，它会提示你输入128位加密的KEY，输入直接解密验证：</p>
+<p><img src="http://upload-images.jianshu.io/upload_images/416783-65e0579bdbd8e44c.png" alt="5B26E15B-9F72-4166-B1C7-6438C0076623.png"></p>
+<p>我想，看了这篇教程学到的不紧紧是破解TexturePacker加密资源哦。。自己动手验证试试。。只随机了一个游戏测试。。有兴趣的朋友可以找个游戏验证验证是否通用。。</p>
+]]></content>
+    
+    <summary type="html">
+    
+      &lt;p&gt;破解TexturePacker加密资源的方式有好多种。。最多的是hook &lt;code&gt;uncompress&lt;/code&gt;然后获取到内容，加入ccz的文件头写入文件。&lt;br&gt;例如：&lt;br&gt;&lt;figure class=&quot;highlight plain&quot;&gt;&lt;table&gt;&lt;tr&gt;&lt;
+    
+    </summary>
+    
+    
+      <category term="TexturePacker" scheme="http://www.moesoft.com/tags/TexturePacker/"/>
+    
+      <category term="macos" scheme="http://www.moesoft.com/tags/macos/"/>
+    
+  </entry>
   
   <entry>
     <title>IOS游戏加速原理与实现</title>
